@@ -1,0 +1,8 @@
+{
+  "name": "liftline-photon-bridge",
+  "private": true,
+  "type": "module",
+  "scripts": { "start": "node --env-file=../../.env server.mjs", "check": "node --check server.mjs" },
+  "dependencies": { "spectrum-ts": "12.10.1" },
+  "overrides": { "@opentelemetry/core": "2.8.0" }
+}
