@@ -12,7 +12,8 @@ def configure(config):
     def call(path,method='GET',body=None):
         req=urllib.request.Request(f'https://spectrum.photon.codes/projects/{project}'+path,
             method=method,data=json.dumps(body).encode() if body is not None else None,
-            headers={'Authorization':auth,'Content-Type':'application/json'})
+            headers={'Authorization':auth,'Content-Type':'application/json',
+                     'User-Agent':'LiftLine/1.0 (+https://github.com/luxinlabs/LiftLine)','Accept':'application/json'})
         with urllib.request.urlopen(req,timeout=15) as response:
             return json.load(response)['data']
     users=call('/users/')

@@ -142,6 +142,11 @@
   .big-pct{font-family:var(--pixel);font-size:22px;color:var(--green);margin:6px 0}
   .steps{margin:0 0 14px;padding-left:20px;color:#ddd}
   .steps li{margin:5px 0}
+  .live-tag{font-family:var(--pixel);font-size:8px;padding:3px 8px;margin-left:8px;background:#555;color:#ddd}
+  .live-tag.on{background:var(--red);color:#fff;animation:blink 1.2s steps(2) infinite}
+  @keyframes blink{50%{opacity:.45}}
+  .explain{background:#1e1e1e;border:2px solid #111;padding:10px;margin:10px 0;color:#ddd;font-size:16px;line-height:1.35}
+  .check{margin:3px 0}.check.ok{color:var(--green)}.check.bad{color:var(--red)}
   tr.pick{cursor:pointer}
   tr.sel td{background:rgba(255,215,0,.14)}
   .src-tables{color:#999;font-size:14px;margin-top:6px}
@@ -206,7 +211,7 @@
             <li>Policy accepts it only if confidence is 80%+, it is the top pick, and it matches the source that owns that data. Otherwise a human dispatcher takes over.</li>
             <li>Only then is that one database queried, and the decision is logged.</li>
           </ol>
-          <h2>Selected Decision</h2>
+          <h2>Jev Decision <span id="live-tag" class="live-tag">LIVE</span> <button id="follow-live" class="ghost" style="display:none">Follow live</button></h2>
           <div id="decision-detail"><div class="empty">Click a row in the routing trace.</div></div>
         </div>
         <div class="panel panel-bevel">
@@ -301,6 +306,24 @@ function renderLiftShaft(r){
     `<div class="lift-car" title="${esc(c.id)} — ${esc(c.state)}" style="animation-delay:${(i%4)*.3}s"></div>`).join('');
 }
 
+function reportText(rep){
+  const lines=[];
+  const walk=(o,ind)=>{ for(const [k,v] of Object.entries(o)){
+    if(v&&typeof v==='object'&&!Array.isArray(v)){ lines.push(ind+k+':'); walk(v,ind+'  '); }
+    else lines.push(ind+k+': '+(Array.isArray(v)?JSON.stringify(v):v)); } };
+  walk(rep,''); return lines.join('\n');
+}
+function downloadReport(id,fmt){
+  const c=(lastReport.cases||[]).find(x=>x.id===id); if(!c) return;
+  let rep; try{rep=JSON.parse(c.report);}catch(e){rep={raw:c.report};}
+  const head={case:c.id,status:c.status,machine:c.machine,created_at:c.created_at};
+  const body=fmt==='json'?JSON.stringify(Object.assign(head,{report:rep}),null,2)
+    :reportText(head)+'\n\n'+reportText(rep)+'\n';
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([body],{type:fmt==='json'?'application/json':'text/plain'}));
+  a.download=`liftline-${id}.${fmt}`; a.click(); URL.revokeObjectURL(a.href);
+}
+
 function renderOverview(r){
   renderCards(r);
   renderLiftShaft(r);
@@ -308,8 +331,15 @@ function renderOverview(r){
     {key:'id',label:'Case',mono:true},{key:'machine',label:'Machine'},
     {key:'status',label:'Status',render:pill},
     {key:'safety_flag',label:'Safety'},{key:'is_repeat_fault',label:'Repeat?',render:v=>v?'yes':'no'},
-    {key:'created_at',label:'Created',render:fmtTime}
+    {key:'created_at',label:'Created',render:fmtTime},
+    {key:'report',label:'Report',render:(v,row)=>{
+      let rep; try{rep=JSON.parse(v);}catch(e){rep={raw:v};}
+      return `<details><summary>▶ view</summary><pre>${esc(reportText(rep))}</pre></details>
+        <button class="ghost dl" data-case="${esc(row.id)}" data-fmt="txt">.txt</button>
+        <button class="ghost dl" data-case="${esc(row.id)}" data-fmt="json">.json</button>`;
+    }}
   ]);
+  document.querySelectorAll('#cases-table .dl').forEach(b=>{ b.onclick=()=>downloadReport(b.dataset.case,b.dataset.fmt); });
   document.getElementById('notify-table').innerHTML=table(r.notifications,[
     {key:'recipient',label:'Recipient',mono:true},{key:'status',label:'Status',render:pill},
     {key:'body',label:'Message'},{key:'error',label:'Error'},{key:'created_at',label:'Created',render:fmtTime}
@@ -319,21 +349,38 @@ function renderOverview(r){
 let selectedDecision=null;
 function parseDetail(d){ try{return JSON.parse(d.detail||'{}');}catch(e){return {};} }
 function pct(x){ return (x*100).toFixed(1).replace(/\.0$/,'')+'%'; }
+function explain(d,det){
+  const probs=Object.entries(det.probabilities).sort((a,b)=>b[1]-a[1]);
+  const top=probs[0], second=probs[1], conf=det.confidence;
+  const checks=[
+    [conf>=0.8, `Confidence ${pct(conf)} is at least 80%`],
+    [top[0]===d.system, `Top-ranked source (${top[0]}) is the one used`],
+    [true, `${d.system} is the only system allowed to own this data`],
+  ];
+  const ok=checks.every(c=>c[0]);
+  return `<div class="explain">Jev read the question and scored every data source. It is <b>${pct(conf)}</b> sure the answer lives in <b>${esc(top[0])}</b>; the runner-up, ${esc(second[0])}, got ${pct(second[1])}. The percentages across all sources add up to 100%.
+    <br><br>The percentage is Jev's certainty, not an accuracy guarantee. We use it as a gate:</div>`+
+    checks.map(c=>`<div class="check ${c[0]?'ok':'bad'}">${c[0]?'✔':'✖'} ${esc(c[1])}</div>`).join('')+
+    `<div class="explain" style="margin-top:8px">${ok?`<b>Accepted.</b> Only ${esc(d.system)} is queried.`:'<b>Rejected.</b> A human dispatcher takes over.'} If any check fails, the call goes to a dispatcher instead of guessing.</div>`;
+}
 function renderDecisionDetail(r){
   const trace=r.routing_trace||[];
   const box=document.getElementById('decision-detail');
-  const d=trace.find(x=>x.id===selectedDecision)||trace[trace.length-1];
-  if(!d){ box.innerHTML='<div class="empty">No decisions yet. Place a call.</div>'; return; }
+  const live=selectedDecision===null;
+  document.getElementById('live-tag').className='live-tag'+(live?' on':'');
+  document.getElementById('live-tag').textContent=live?'● LIVE':'PINNED';
+  document.getElementById('follow-live').style.display=live?'none':'';
+  const d=live?trace[trace.length-1]:trace.find(x=>x.id===selectedDecision);
+  if(!d){ box.innerHTML='<div class="empty">No decisions yet. Place a call and this updates as Jev decides.</div>'; return; }
   const det=parseDetail(d), src=r.sources||{};
   const tables=(src[d.system]?Object.keys(src[d.system]):[]).join(', ');
-  let html=`<p><b>Question:</b> ${esc(det.question||d.operation)}</p><p><b>Database used:</b> <span class="pill status-dispatched">${esc(d.system)}</span></p>`;
+  let html=`<p><b>Call ${esc(d.call_id)}</b> · ${esc(fmtTime(d.created_at))}</p><p><b>Question:</b> ${esc(det.question||d.operation)}</p><p><b>Database used:</b> <span class="pill status-dispatched">${esc(d.system)}</span></p>`;
   if(det.probabilities){
     html+=`<div class="big-pct">${pct(det.confidence)}</div><div style="color:#999">confidence · model ${esc(det.model)}</div><div style="margin-top:8px">`;
-    const rows=Object.entries(det.probabilities).sort((a,b)=>b[1]-a[1]);
-    for(const [k,v] of rows) html+=`<div class="prob-row ${k===d.system?'win':''}"><span>${esc(k)}</span><div class="prob-bar"><div class="prob-fill" style="width:${(v*100).toFixed(1)}%"></div></div><span>${pct(v)}</span></div>`;
-    html+='</div>';
+    for(const [k,v] of Object.entries(det.probabilities).sort((a,b)=>b[1]-a[1])) html+=`<div class="prob-row ${k===d.system?'win':''}"><span>${esc(k)}</span><div class="prob-bar"><div class="prob-fill" style="width:${(v*100).toFixed(1)}%"></div></div><span>${pct(v)}</span></div>`;
+    html+='</div>'+explain(d,det);
   } else {
-    html+='<div class="empty">Older or demo-mode decision: Jev probabilities were not recorded. New live calls show them.</div>';
+    html+='<div class="empty">Jev probabilities were not recorded for this one (demo mode or an older call). New live calls show them.</div>';
   }
   if(tables) html+=`<div class="src-tables">${esc(d.system)} tables: ${esc(tables)}</div>`;
   box.innerHTML=html;
@@ -350,7 +397,7 @@ function renderDecisions(r){
     {key:'_pct',label:'Confidence'},
     {key:'reason',label:'Jev Decision'},
   ]);
-  const current=selectedDecision||(trace[trace.length-1]||{}).id;
+  const current=selectedDecision===null?(trace[trace.length-1]||{}).id:selectedDecision;
   document.querySelectorAll('#decisions-table tbody tr').forEach((tr,i)=>{
     tr.classList.add('pick');
     if(rows[i].id===current) tr.classList.add('sel');
@@ -454,6 +501,7 @@ document.getElementById('save-key').onclick=()=>{
   poll();
 };
 document.getElementById('refresh-now').onclick=poll;
+document.getElementById('follow-live').onclick=()=>{ selectedDecision=null; renderDecisions(lastReport); };
 document.getElementById('admin-key').value=getKey();
 
 for(const btn of document.querySelectorAll('nav button')){
