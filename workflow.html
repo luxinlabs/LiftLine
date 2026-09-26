@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LiftLine — AI Elevator Service Dispatch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --navy:#0A1628; --navy-2:#12213A; --ink:#0F172A; --body:#334155; --muted:#64748B;
+  --line:#E2E8F0; --soft:#F1F5F9; --paper:#FFFFFF;
+  --blue:#2563EB; --blue-soft:#DBEAFE; --green:#16A34A; --green-soft:#DCFCE7;
+  --amber:#D97706; --amber-soft:#FEF3C7; --red:#DC2626; --red-soft:#FEE2E2;
+  --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  --mono:'JetBrains Mono','SF Mono',Menlo,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;background:#05080F;font-family:var(--sans);color:var(--body);overflow:hidden;-webkit-font-smoothing:antialiased}
+
+#viewport{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#stage{width:1600px;height:900px;position:relative;transform-origin:center center;flex-shrink:0}
+.slide{position:absolute;inset:0;background:var(--paper);display:none;flex-direction:column;padding:72px 96px 0;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.45)}
+.slide.active{display:flex}
+.slide.dark{background:radial-gradient(1200px 700px at 85% 10%,#1E3A8A 0%,rgba(30,58,138,0) 60%),var(--navy);color:#CBD5E1}
+
+.eyebrow{font-size:15px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--blue);margin-bottom:14px}
+.dark .eyebrow{color:#60A5FA}
+h1{font-size:104px;font-weight:800;letter-spacing:-.035em;color:#fff;line-height:1}
+h2{font-size:50px;font-weight:700;letter-spacing:-.025em;color:var(--ink);line-height:1.1}
+.dark h2{color:#fff}
+.lede{font-size:22px;line-height:1.55;color:var(--muted);max-width:1180px;margin-top:18px}
+.dark .lede{color:#94A3B8}
+.body{flex:1;display:flex;flex-direction:column;justify-content:center;padding:32px 0 24px}
+
+.foot{height:64px;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;font-size:14px;color:var(--muted);margin-top:auto}
+.dark .foot{border-color:rgba(255,255,255,.1);color:#64748B}
+.foot b{color:var(--ink);font-weight:700;letter-spacing:.02em}
+.dark .foot b{color:#E2E8F0}
+
+.grid{display:grid;gap:24px}
+.g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(4,1fr)}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:26px 28px}
+.card.fill{background:var(--soft);border-color:transparent}
+.card h3{font-size:21px;font-weight:700;color:var(--ink);margin-bottom:8px}
+.card p,.card li{font-size:17px;line-height:1.55;color:var(--body)}
+.card ul{list-style:none}
+.card li{padding-left:22px;position:relative;margin:7px 0}
+.card li::before{content:"";position:absolute;left:2px;top:10px;width:8px;height:8px;border-radius:2px;background:var(--blue)}
+.kicker{font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+
+.tag{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;padding:5px 11px;border-radius:999px;background:var(--blue-soft);color:var(--blue)}
+.tag.g{background:var(--green-soft);color:var(--green)}.tag.a{background:var(--amber-soft);color:var(--amber)}.tag.r{background:var(--red-soft);color:var(--red)}
+
+code,.mono{font-family:var(--mono)}
+.code{background:var(--navy);color:#E2E8F0;border-radius:12px;padding:22px 26px;font-family:var(--mono);font-size:15px;line-height:1.7;white-space:pre;overflow:hidden}
+.code .c{color:#64748B}.code .k{color:#93C5FD}.code .s{color:#86EFAC}.code .n{color:#FCD34D}
+
+/* Title */
+.title-wrap{flex:1;display:flex;flex-direction:column;justify-content:center}
+.title-sub{font-size:30px;color:#CBD5E1;margin-top:26px;font-weight:500;max-width:1050px;line-height:1.4}
+.sponsors{display:flex;gap:14px;margin-top:56px;flex-wrap:wrap}
+.sponsor{border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.04);color:#E2E8F0;border-radius:10px;padding:12px 20px;font-size:17px;font-weight:600}
+.sponsor span{display:block;font-size:12px;font-weight:500;color:#64748B;letter-spacing:.08em;text-transform:uppercase;margin-bottom:2px}
+
+/* Problem stats */
+.stat{font-size:64px;font-weight:800;color:var(--ink);letter-spacing:-.03em;line-height:1}
+.stat small{font-size:22px;color:var(--muted);font-weight:600;margin-left:4px}
+
+/* Pipeline */
+.pipe{display:grid;grid-template-columns:repeat(4,1fr);gap:22px 40px;position:relative}
+.step{position:relative;background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:22px 22px 20px;min-height:178px}
+.step .num{width:34px;height:34px;border-radius:9px;background:var(--navy);color:#fff;font-weight:700;font-size:15px;display:flex;align-items:center;justify-content:center;margin-bottom:14px}
+.step h4{font-size:19px;font-weight:700;color:var(--ink);margin-bottom:6px}
+.step p{font-size:15px;line-height:1.5;color:var(--body)}
+.step .who{position:absolute;top:22px;right:20px}
+.step:not(:nth-child(4n))::after{content:"";position:absolute;right:-30px;top:50%;width:20px;height:2px;background:#94A3B8}
+.step:not(:nth-child(4n))::before{content:"";position:absolute;right:-31px;top:calc(50% - 5px);border-left:8px solid #94A3B8;border-top:6px solid transparent;border-bottom:6px solid transparent}
+.rail{margin-top:26px;border:1.5px dashed #FCA5A5;background:#FFF7F7;border-radius:12px;padding:16px 22px;display:flex;align-items:center;gap:16px;font-size:17px;color:#7F1D1D}
+.rail b{color:var(--red)}
+
+/* Transcript */
+.chat{display:flex;flex-direction:column;gap:12px}
+.msg{max-width:92%;padding:13px 18px;border-radius:14px;font-size:16px;line-height:1.5}
+.msg .who{display:block;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;margin-bottom:3px;opacity:.7}
+.msg.agent{background:var(--soft);color:var(--ink);border-top-left-radius:4px}
+.msg.user{align-self:flex-end;background:var(--blue);color:#fff;border-top-right-radius:4px}
+
+/* Table */
+table{width:100%;border-collapse:collapse;font-size:16px}
+th{text-align:left;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700;padding:0 14px 10px;border-bottom:1px solid var(--line)}
+td{padding:11px 14px;border-bottom:1px solid var(--line);color:var(--body)}
+td:first-child{font-family:var(--mono);color:var(--ink);font-weight:500}
+tr:last-child td{border-bottom:none}
+
+/* Architecture */
+.arch{display:grid;grid-template-columns:230px 1fr 300px;gap:34px;align-items:stretch}
+.node{border:1px solid var(--line);border-radius:12px;padding:16px 18px;background:var(--paper)}
+.node .t{font-size:17px;font-weight:700;color:var(--ink)}
+.node .d{font-size:14px;color:var(--muted);margin-top:3px;line-height:1.45}
+.node.ext{border-color:#BFDBFE;background:#F8FBFF}
+.node.core{background:var(--navy);border-color:var(--navy)}
+.node.core .t{color:#fff}.node.core .d{color:#94A3B8}
+.col{display:flex;flex-direction:column;gap:14px;justify-content:center}
+.server{border:2px solid var(--navy);border-radius:16px;padding:22px;display:flex;flex-direction:column;gap:14px}
+.server .hdr{display:flex;justify-content:space-between;align-items:center}
+.server .hdr .t{font-size:19px;font-weight:800;color:var(--ink)}
+.mods{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.dbs{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.db{border-radius:10px;background:var(--soft);padding:12px;text-align:center}
+.db .t{font-weight:700;color:var(--ink);font-size:16px}.db .d{font-size:12px;color:var(--muted);margin-top:2px}
+.flowlbl{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+
+/* Sponsor header */
+.sp-head{display:flex;align-items:flex-end;justify-content:space-between;gap:30px}
+.role{font-size:15px;font-weight:600;color:var(--muted);text-align:right;line-height:1.5}
+.role b{display:block;color:var(--ink);font-size:20px}
+
+.states{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:6px}
+.states .arrow{color:#94A3B8;font-weight:700}
+
+/* Nav chrome */
+#progress{position:fixed;left:0;top:0;height:3px;background:var(--blue);transition:width .25s ease;z-index:5}
+#nav{position:fixed;right:22px;bottom:18px;display:flex;align-items:center;gap:8px;z-index:5;font-size:13px;color:#94A3B8;font-family:var(--sans)}
+#nav button{width:34px;height:34px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(15,23,42,.7);color:#E2E8F0;cursor:pointer;font-size:16px}
+#nav button:hover{background:#1E293B}
+#hint{position:fixed;left:22px;bottom:22px;font-size:12px;color:#475569;z-index:5}
+
+@media print{
+  @page{size:1600px 900px;margin:0}
+  html,body{overflow:visible;background:#fff;height:auto}
+  #viewport{position:static;display:block}
+  #stage{transform:none!important;width:1600px;height:auto}
+  .slide{display:flex!important;position:relative;width:1600px;height:900px;box-shadow:none;page-break-after:always;break-after:page}
+  #progress,#nav,#hint{display:none}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+</style>
+</head>
+<body>
+<div id="progress"></div>
+<div id="viewport"><div id="stage">
+
+<!-- 1. Title -->
+<section class="slide dark">
+  <div class="title-wrap">
+    <div class="eyebrow">TypeSafe AI Hackathon · September 26, 2026</div>
+    <h1>LiftLine</h1>
+    <p class="title-sub">AI-powered elevator service dispatch. One phone call: safety triage, caller verification, fault diagnosis, and a technician on the way.</p>
+    <div class="sponsors">
+      <div class="sponsor"><span>Routing</span>TypeSafe Jev</div>
+      <div class="sponsor"><span>Voice</span>Twilio</div>
+      <div class="sponsor"><span>Messaging</span>Photon Spectrum</div>
+      <div class="sponsor"><span>Code review</span>CodeRabbit</div>
+      <div class="sponsor"><span>Speech</span>ElevenLabs</div>
+    </div>
+  </div>
+  <div class="foot"><b>LIFTLINE</b><span class="pg"></span></div>
+</section>
+
+<!-- 2. Problem -->
+<section class="slide">
+  <div class="eyebrow">The problem</div>
+  <h2>A stalled elevator call touches four systems<br>before anyone is dispatched</h2>
+  <div class="body">
+    <div class="grid g4">
+      <div class="card fill"><div class="kicker">CRM</div><h3>Who is calling?</h3><p>Is this person an authorized contact for this building?</p></div>
+      <div class="card fill"><div class="kicker">SAP</div><h3>Which machine?</h3><p>Resolve the unit, its controller, warranty, and service contract.</p></div>
+      <div class="card fill"><div class="kicker">IoT</div><h3>What is it doing?</h3><p>Read recent faults and check that the telemetry is still live.</p></div>
+      <div class="card fill"><div class="kicker">Field service</div><h3>Who can go?</h3><p>Check prior repairs and find a certified, available technician.</p></div>
+    </div>
+    <div class="grid g3" style="margin-top:40px">
+      <div><div class="stat">4<small>systems</small></div><p class="lede" style="font-size:18px;margin-top:10px">A dispatcher looks each one up by hand while the caller waits on the line.</p></div>
+      <div><div class="stat">1<small>wrong guess</small></div><p class="lede" style="font-size:18px;margin-top:10px">A wrong lookup can send an uncertified technician or bill a covered repair.</p></div>
+      <div><div class="stat">0<small>tolerance</small></div><p class="lede" style="font-size:18px;margin-top:10px">If someone is trapped, automation must get out of the way immediately.</p></div>
+    </div>
+  </div>
+  <div class="foot"><b>LIFTLINE</b><span class="pg"></span></div>
+</section>
+
+<!-- 3. Solution -->
+<section class="slide">
+  <div class="eyebrow">The solution</div>
+  <h2>An automated service line that knows<br>where to look, and when to stop</h2>
+  <div class="body">
+    <div class="grid g3">
+      <div class="card">
+        <span class="tag r">Deterministic</span>
+        <h3 style="margin-top:14px">Safety comes first</h3>
+        <p>The call starts with a fixed safety question that no model can override. Danger words later in the call also go straight to a human dispatcher.</p>
+      </div>
+      <div class="card">
+        <span class="tag">Typed AI</span>
+        <h3 style="margin-top:14px">Jev picks the data source</h3>
+        <p>TypeSafe Jev chooses the system for each workflow question. Every choice carries a confidence score and passes through an allowlist. Anything uncertain stops.</p>
+      </div>
+      <div class="card">
+        <span class="tag g">Closed loop</span>
+        <h3 style="margin-top:14px">Dispatch and notify</h3>
+        <p>The case, work order, and notifications are written atomically. With the caller's consent, Photon iMessage sends the report and ETA.</p>
+      </div>
+    </div>
+    <p class="lede" style="margin-top:40px">LiftLine is a <b style="color:var(--ink)">structured workflow, not an open-ended chatbot</b>. The AI decides where to look; business rules decide what happens.</p>
+  </div>
+  <div class="foot"><b>LIFTLINE</b><span class="pg"></span></div>
+</section>
+
+<!-- 4. End-to-end workflow -->
+<section class="slide">
+  <div class="eyebrow">End-to-end workflow</div>
+  <h2>From ring to technician in eight steps</h2>
+  <div class="body" style="padding-top:28px">
+    <div class="pipe">
+      <div class="step"><span class="tag who">Twilio</span><div class="num">1</div><h4>Call received</h4><p>The webhook fires and the Twilio request signature is verified before anything runs.</p></div>
+      <div class="step"><span class="tag r who">Rule</span><div class="num">2</div><h4>Safety triage</h4><p>Trapped, injured, or unsure? Press 1 or 3 for an immediate dispatcher handoff.</p></div>
+      <div class="step"><span class="tag who">Twilio</span><div class="num">3</div><h4>Identify</h4><p>Machine number by speech or keypad, read back to confirm. Registered phone number plus a hashed PIN.</p></div>
+      <div class="step"><span class="tag who">Jev</span><div class="num">4</div><h4>Route</h4><p>Jev maps each workflow question to a data source. Confidence must be at least 0.80 and the source must be on the allowlist.</p></div>
+      <div class="step"><span class="tag g who">SAP · IoT</span><div class="num">5</div><h4>Investigate</h4><p>Site-scoped equipment lookup, a telemetry freshness check (24 h or less), critical-code scan, and fault correlation.</p></div>
+      <div class="step"><span class="tag g who">SAP</span><div class="num">6</div><h4>Coverage</h4><p>Warranty and contract check. Billable visits require explicit caller approval.</p></div>
+      <div class="step"><span class="tag g who">CRM · Field</span><div class="num">7</div><h4>Dispatch</h4><p>Duplicate-case check, certified and available technician, then one atomic write for the case, work order, and outbox.</p></div>
+      <div class="step"><span class="tag who">Photon</span><div class="num">8</div><h4>Notify &amp; confirm</h4><p>Consent-gated iMessage report. The dispatcher accepts and the ETA becomes final.</p></div>
+    </div>
+    <div class="rail"><span class="tag r">Handoff</span><span>If any check fails, the call goes to a <b>human dispatcher</b>. That covers unverified callers, stale telemetry, low Jev confidence, duplicate cases, and no available technician.</span></div>
+  </div>
+  <div class="foot"><b>LIFTLINE</b><span class="pg"></span></div>
+</section>
+
+<!-- 5. Live demo -->
+<section class="slide">
+  <div class="eyebrow">Demo · python3 -m lift_agent demo</div>
+  <h2>A real call, start to finish</h2>
+  <div class="body" style="padding-top:24px">
+    <div class="grid" style="grid-template-columns:1.35fr 1fr;gap:40px;align-items:start">
+      <div class="chat">
+        <div class="msg agent"><span class="who">LiftLine</span>Is anyone trapped, injured, or in immediate danger? Press 1 for yes, 2 for no, or 3 if you are unsure.</div>
+        <div class="msg user"><span class="who">Caller</span>2</div>
+        <div class="msg agent"><span class="who">LiftLine</span>I heard machine 1 0 0 2. Press 1 to confirm, or 2 to try again.</div>
+        <div class="msg user"><span class="who">Caller</span>1 · PIN ••••••</div>
+        <div class="msg agent"><span class="who">LiftLine</span>Car B has 14 matching fault events in the last seven days, mostly near floor 7: door lock circuit interrupted during travel. This may relate to the component repaired on 2026-09-07. This visit is covered at no charge. I have requested Ravi. The provisional travel estimate is 20 minutes after acceptance. Your case number is CS-3850D64A73.</div>
+        <div class="msg user"><span class="who">Caller</span>1 · consent to Photon updates</div>
+      </div>
+      <div>
+        <div class="kicker">Routing trace</div>
+        <div class="code" style="font-size:14px;line-height:1.85"><span class="c"># question     source   decision</span>
+identity   <span class="k">→</span> <span class="s">crm</span>
+equipment  <span class="k">→</span> <span class="s">sap</span>
+telemetry  <span class="k">→</span> <span class="s">iot</span>
+history    <span class="k">→</span> <span class="s">field</span>
+coverage   <span class="k">→</span> <span class="s">sap</span>
+duplicate  <span class="k">→</span> <span class="s">crm</span>
+dispatch   <span class="k">→</span> <span class="s">field</span>
+
+<span class="n">Cases: 1 · queued notifications: 3</span></div>
+        <div class="card fill" style="margin-top:18px;padding:18px 22px">
+          <div class="kicker" style="margin-bottom:6px">Other scenarios</div>
+          <p style="font-size:15px"><code>--scenario entrapment · billable · clean · unauthorized</code><br>Add <code>--live-jev</code> to use real Jev decisions and confidence scores.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><b>LIFTLINE</b><span class="pg"></span></div>
+</section>
+
+<!-- 6. TypeSafe Jev -->
+<section class="slide">
+  <div class="sp-head">
+    <div><div class="eyebrow">Sponsor · TypeSafe Jev</div><h2>Typed AI decisions with calibrated confidence</h2></div>
+    <div class="role"><b>Routing brain</b>lift_agent/router.py</div>
+  </div>
+  <div class="body" style="padding-top:26px">
+    <div class="grid" style="grid-template-columns:1.05fr 1fr;gap:36px">
+      <div>
+        <div class="kicker">How we call it</div>
+        <div class="code" style="font-size:14px"><span class="c"># POST https://api.typesafe.ai/v1/systemone</span>
+{
+  <span class="k">"model"</span>: <span class="s">"jev-latest"</span>,
+  <span class="k">"state"</span>: { <span class="k">"workflow"</span>: <span class="s">"Elevator fault intake…"</span>,
+             <span class="k">"catalog"</span>: <span class="n">SOURCES</span> },
+  <span class="k">"questions"</span>: {
+    <span class="k">"equipment"</span>: { <span class="k">"type"</span>: <span class="s">"choice"</span>,
+      <span class="k">"instructions"</span>: <span class="s">"Resolve a machine number…"</span>,
+      <span class="k">"criteria"</span>: <span class="n">SOURCES</span> }, <span class="c">…7 questions</span>
+  }
+}</div>
+        <div class="card fill" style="margin-top:18px;padding:18px 22px">
+          <p style="font-size:15px"><b style="color:var(--ink)">Privacy by design.</b> Jev only receives the schema catalog and the workflow questions. PINs, phone numbers, and caller transcripts are never sent.</p>
+        </div>
+      </div>
+      <div>
+        <div class="kicker">Guardrails on every answer</div>
+        <div class="card" style="padding:20px 24px">
+          <ul>
+            <li>The <code>choice</code> must equal the allowlisted source for that question</li>
+            <li>Confidence must fall between <b>0.80 and 1.00</b> and be finite</li>
+            <li>The probabilities must cover the full catalog and sum to 1 ± 0.01</li>
+            <li>The chosen source must have the highest probability</li>
+            <li>Every decision is logged with the model version and confidence</li>
+          </ul>
+        </div>
+        <div class="rail" style="margin-top:18px;font-size:15px"><span class="tag r">Fail-closed</span>Any violation, timeout, or bad payload raises <code>RoutingUnavailable</code> and hands the call to a dispatcher.</div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><b>LIFTLINE</b><span class="pg"></span></div>
+</section>
+
+<!-- 7. Twilio -->
+<section class="slide">
+  <div class="sp-head">
+    <div><div class="eyebrow">Sponsor · Twilio</div><h2>The phone line and the conversation engine</h2></div>
+    <div class="role"><b>Voice intake</b>lift_agent/voice.py · server.py</div>
+  </div>
+  <div class="body">
+    <div class="grid g2" style="gap:36px">
+      <div class="grid" style="gap:18px">
+        <div class="card"><h3>Speech + keypad capture</h3><p>Twilio <code>&lt;Gather&gt;</code> takes speech with a DTMF fallback. Machine numbers are read back digit by digit to confirm.</p></div>
+        <div class="card"><h3>TwiML state machine</h3><p>Each webhook advances a persisted call state: safety → machine → PIN → describe → approval → consent. The webhooks are retry-safe.</p></div>
+        <div class="card"><h3>Human handoff</h3><p>Safety flags and failed checks transfer the caller to <code>DISPATCHER_PHONE</code>. If the transfer fails, the caller hears emergency guidance.</p></div>
+      </div>
+      <div>
+        <div class="kicker">Webhook security</div>
+        <div class="code" style="font-size:14px"><span class="c"># Every request must carry a valid signature</span>
+<span class="k">X-Twilio-Signature</span> = base64(
+  HMAC-SHA1(<span class="n">TWILIO_AUTH_TOKEN</span>,
+            <span class="s">url</span> + <span class="s">sorted(params)</span>))
+
+<span class="c"># tampered URL or param → rejected</span>
+<span class="c"># tests/test_workflow.py covers both</span></div>
+        <div class="card fill" style="margin-top:18px">
+          <div class="kicker" style="margin-bottom:6px">Plus · ElevenLabs</div>
+          <p style="font-size:16px">An optional natural voice (<code>eleven_flash_v2_5</code>) replaces <code>&lt;Say&gt;</code> with cached MP3 audio. If synthesis is unavailable, it falls back to Twilio speech.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><b>LIFTLINE</b><span class="pg"></span></div>
+</section>
+
+<!-- 8. Photon -->
+<section class="slide">
+  <div class="sp-head">
+    <div><div class="eyebrow">Sponsor · Photon Spectrum</div><h2>Case reports and ETAs, delivered by iMessage</h2></div>
+    <div class="role"><b>Notifications</b>integrations/photon/server.mjs</div>
+  </div>
+  <div class="body" style="padding-top:26px">
+    <div class="grid" style="grid-template-columns:1fr 1.05fr;gap:36px">
+      <div>
+        <div class="kicker">Delivery path</div>
+        <div class="col" style="gap:10px">
+          <div class="node core"><div class="t">Durable outbox (SQLite)</div><div class="d">Written in the same transaction as the case</div></div>
+          <div class="node"><div class="t">Photon bridge · 127.0.0.1:8081</div><div class="d">Localhost only · bearer token with timing-safe compare</div></div>
+          <div class="node ext"><div class="t">spectrum-ts · iMessage provider</div><div class="d">im.user() → im.space.create() → space.send()</div></div>
+          <div class="node"><div class="t">Caller · Technician · Dispatcher</div><div class="d">Caller messages require explicit consent on the call</div></div>
+        </div>
+      </div>
+      <div>
+        <div class="kicker">Outbox lifecycle</div>
+        <div class="card" style="padding:20px 24px">
+          <div class="states"><span class="tag">pending</span><span class="arrow">→</span><span class="tag a">sending</span><span class="arrow">→</span><span class="tag g">accepted</span><span class="arrow">/</span><span class="tag r">needs_review</span></div>
+          <p style="margin-top:14px;font-size:16px">No blind resends. A timed-out message may already have been accepted by the provider, so it goes to an operator for review instead of being sent twice.</p>
+        </div>
+        <div class="card" style="margin-top:18px;padding:20px 24px">
+          <ul>
+            <li>Demo mode sends only labeled <code>[LIFTLINE DEMO]</code> messages to one test recipient</li>
+            <li>Provider errors are redacted: secrets and phone numbers are stripped</li>
+            <li>The server drains the outbox every 2 s when <code>SEND_NOTIFICATIONS=true</code></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><b>LIFTLINE</b><span class="pg"></span></div>
+</section>
+
+<!-- 9. CodeRabbit -->
+<section class="slide">
+  <div class="sp-head">
+    <div><div class="eyebrow">Sponsor · CodeRabbit</div><h2>AI code review as our quality gate</h2></div>
+    <div class="role"><b>Engineering workflow</b>github.com/luxinlabs/LiftLine</div>
+  </div>
+  <div class="body">
+    <div class="grid g3">
+      <div class="card"><span class="tag">1 · Open PR</span><h3 style="margin-top:14px">Every change goes through review</h3><p>Each pull request gets an automatic line-by-line CodeRabbit review and a summary of the change.</p></div>
+      <div class="card"><span class="tag a">2 · Review</span><h3 style="margin-top:14px">Focused on what matters here</h3><p>Safety-gate bypasses, SQL built from user input, leaked secrets or PII in logs, and missing error handling around external APIs.</p></div>
+      <div class="card"><span class="tag g">3 · Merge</span><h3 style="margin-top:14px">Backed by tests</h3><p>The review sits alongside our three test suites, which run locally without ever calling a real phone or provider.</p></div>
+    </div>
+    <div class="kicker" style="margin-top:40px">Test suites run with <code>python3 -m unittest discover -s tests -v</code></div>
+    <div class="grid g3">
+      <div class="card fill"><h3 class="mono" style="font-size:17px">test_workflow.py</h3><p>Main story, the four alternate scenarios, coverage boundaries, stale telemetry, consent, routing failures</p></div>
+      <div class="card fill"><h3 class="mono" style="font-size:17px">test_http.py</h3><p>HTTP contract, admin authentication, Twilio signature tampering, retry-safe webhooks</p></div>
+      <div class="card fill"><h3 class="mono" style="font-size:17px">test_otis.py</h3><p>Importing the Otis CRM dataset and running the workflow on real-shaped records</p></div>
+    </div>
+  </div>
+  <div class="foot"><b>LIFTLINE</b><span class="pg"></span></div>
+</section>
+
+<!-- 10. Architecture -->
+<section class="slide">
+  <div class="eyebrow">Architecture</div>
+  <h2>One Python service, standard library only</h2>
+  <div class="body" style="padding-top:26px">
+    <div class="arch">
+      <div class="col">
+        <div class="flowlbl">Inbound</div>
+        <div class="node"><div class="t">Caller</div><div class="d">Building contact on any phone</div></div>
+        <div class="node ext"><div class="t">Twilio Voice</div><div class="d">Gather · TwiML · signed webhooks</div></div>
+        <div class="node"><div class="t">Dispatcher</div><div class="d">Dashboard + <code>/api/dispatch/accept</code></div></div>
+      </div>
+      <div class="server">
+        <div class="hdr"><span class="t">LiftLine server · :8080</span><span class="tag">Python 3.11 · stdlib</span></div>
+        <div class="mods">
+          <div class="node core"><div class="t">voice.py</div><div class="d">Call state machine, TwiML</div></div>
+          <div class="node core"><div class="t">router.py</div><div class="d">Jev client + guardrails</div></div>
+          <div class="node core"><div class="t">service.py</div><div class="d">Investigate, coverage, dispatch</div></div>
+          <div class="node core"><div class="t">notifications.py</div><div class="d">Outbox delivery worker</div></div>
+        </div>
+        <div class="flowlbl" style="margin-top:4px">SQLite stand-ins for enterprise systems</div>
+        <div class="dbs">
+          <div class="db"><div class="t">CRM</div><div class="d">contacts, cases</div></div>
+          <div class="db"><div class="t">SAP</div><div class="d">equipment, contracts</div></div>
+          <div class="db"><div class="t">IoT</div><div class="d">faults, health</div></div>
+          <div class="db"><div class="t">Field</div><div class="d">repairs, techs</div></div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="flowlbl">External services</div>
+        <div class="node ext"><div class="t">TypeSafe Jev</div><div class="d">Source routing decisions</div></div>
+        <div class="node ext"><div class="t">ElevenLabs</div><div class="d">Optional natural voice</div></div>
+        <div class="node ext"><div class="t">Photon Spectrum</div><div class="d">via Node 22 bridge · spectrum-ts</div></div>
+        <div class="node"><div class="t">iMessage recipients</div><div class="d">Caller · technician · dispatcher</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><b>LIFTLINE</b><span class="pg"></span></div>
+</section>
+
+<!-- 11. Safety & security -->
+<section class="slide">
+  <div class="eyebrow">Trust</div>
+  <h2>Safety and security built into every layer</h2>
+  <div class="body">
+    <div class="grid g2" style="gap:36px">
+      <div class="card">
+        <span class="tag r">Safety</span>
+        <ul style="margin-top:14px">
+          <li>Deterministic triage runs before Jev or any data lookup</li>
+          <li>Danger words at any later step interrupt the call and trigger a handoff</li>
+          <li>A critical telemetry code in the last 30 minutes also triggers a handoff</li>
+          <li>LiftLine never says an elevator is safe to use</li>
+          <li>The ETA stays provisional until the dispatcher accepts</li>
+        </ul>
+      </div>
+      <div class="card">
+        <span class="tag">Security</span>
+        <ul style="margin-top:14px">
+          <li>PINs hashed with <b>PBKDF2-SHA256</b>, a per-contact salt, and 200k iterations</li>
+          <li>Registered phone number <b>and</b> PIN required. Lockout after 5 failures per hour</li>
+          <li>Twilio signatures verified. Admin APIs require a bearer token</li>
+          <li>Parameterized, site-scoped SQL throughout</li>
+          <li>Redacted logs. Live mode refuses synthetic data</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><b>LIFTLINE</b><span class="pg"></span></div>
+</section>
+
+<!-- 12. Run it -->
+<section class="slide">
+  <div class="eyebrow">Try it</div>
+  <h2>Run the demo in one command</h2>
+  <div class="body">
+    <div class="grid g2" style="gap:36px">
+      <div>
+        <div class="kicker">Local · no accounts needed</div>
+        <div class="code"><span class="c"># full synthetic call + routing trace</span>
+python3 -m lift_agent demo
+python3 -m lift_agent demo --scenario entrapment
+
+<span class="c"># real Jev decisions (TYPESAFE_API_KEY)</span>
+python3 -m lift_agent demo --live-jev
+
+<span class="c"># tests</span>
+python3 -m unittest discover -s tests -v</div>
+      </div>
+      <div>
+        <div class="kicker">Live · real phone + iMessage</div>
+        <div class="code"><span class="c"># 1. service + operator dashboard</span>
+python3 -m lift_agent serve      <span class="c"># :8080</span>
+
+<span class="c"># 2. Photon bridge</span>
+cd integrations/photon && npm ci && npm start
+
+<span class="c"># 3. Twilio incoming-call webhook</span>
+POST <span class="s">&lt;PUBLIC_BASE_URL&gt;/voice</span>
+
+<span class="c"># 4. dispatcher confirms ETA</span>
+POST <span class="s">/api/dispatch/accept</span> {case_id, eta_minutes}</div>
+      </div>
+    </div>
+    <p class="lede" style="margin-top:28px;font-size:18px">Demo identity: machine <code>1002</code> (Car B) · caller Priya <code>+15550100100</code> · PIN <code>246810</code> · demo clock Sep 26, 2026, 2:10 pm PT.</p>
+  </div>
+  <div class="foot"><b>LIFTLINE</b><span class="pg"></span></div>
+</section>
+
+<!-- 13. Close -->
+<section class="slide dark">
+  <div class="title-wrap">
+    <div class="eyebrow">LiftLine</div>
+    <h2 style="font-size:76px;line-height:1.05;max-width:1250px">Every elevator call triaged, verified, and dispatched, with a human always one step away.</h2>
+    <div class="sponsors" style="margin-top:60px">
+      <div class="sponsor"><span>Repository</span>github.com/luxinlabs/LiftLine</div>
+      <div class="sponsor"><span>Built with</span>TypeSafe Jev · Twilio · Photon · CodeRabbit · ElevenLabs</div>
+    </div>
+  </div>
+  <div class="foot"><b>LIFTLINE</b><span class="pg"></span></div>
+</section>
+
+</div></div>
+
+<div id="nav"><span id="count"></span><button id="prev" aria-label="Previous">‹</button><button id="next" aria-label="Next">›</button></div>
+<div id="hint">← → to navigate · F for fullscreen · ⌘P to export PDF</div>
+
+<script>
+const slides=[...document.querySelectorAll('.slide')];
+const stage=document.getElementById('stage');
+let i=Math.min(Math.max((parseInt(location.hash.slice(1))||1)-1,0),slides.length-1);
+slides.forEach((s,n)=>{
+  s.querySelector('.pg').textContent=String(n+1).padStart(2,'0')+' / '+String(slides.length).padStart(2,'0');
+});
+function fit(){const k=Math.min(innerWidth/1600,innerHeight/900)*0.96;stage.style.transform='scale('+k+')';}
+function show(n){
+  i=Math.min(Math.max(n,0),slides.length-1);
+  slides.forEach((s,k)=>s.classList.toggle('active',k===i));
+  document.getElementById('progress').style.width=((i+1)/slides.length*100)+'%';
+  document.getElementById('count').textContent=(i+1)+' / '+slides.length;
+  history.replaceState(null,'','#'+(i+1));
+}
+addEventListener('keydown',e=>{
+  if(['ArrowRight','PageDown',' ','Enter'].includes(e.key)){e.preventDefault();show(i+1);}
+  else if(['ArrowLeft','PageUp','Backspace'].includes(e.key)){e.preventDefault();show(i-1);}
+  else if(e.key==='Home')show(0);
+  else if(e.key==='End')show(slides.length-1);
+  else if(e.key==='f'||e.key==='F'){document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen();}
+});
+document.getElementById('next').onclick=()=>show(i+1);
+document.getElementById('prev').onclick=()=>show(i-1);
+addEventListener('resize',fit);
+fit();show(i);
+</script>
+</body>
+</html>

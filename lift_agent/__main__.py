@@ -61,6 +61,8 @@ def main():
     sub.add_parser('notify',help='Process notification outbox; requires configured live mode')
     imported=sub.add_parser('import-otis',help='Import the supplied Otis SQLite fixture into an empty DATA_DIR')
     imported.add_argument('--source',default='seed/otis/otis_hackathon.db')
+    exp=sub.add_parser('export-data',help='Write a Markdown report of every table in DATA_DIR')
+    exp.add_argument('--out',default='docs/demo-data-report.md')
     sub.add_parser('configure-phone',help='Connect the configured Twilio number to this service; saves previous settings')
     sub.add_parser('discover-phone',help='Discover Twilio numbers using API-key credentials')
     sub.add_parser('configure-photon',help='Register the chosen test recipient with Photon and name the profile LiftLine')
@@ -78,6 +80,10 @@ def main():
     if args.command=='import-otis':
         from .otis_import import import_otis
         print(json.dumps(import_otis(args.source,config.data_dir),indent=2))
+        return
+    if args.command=='export-data':
+        from .export import export_markdown
+        print(export_markdown(config.data_dir,args.out))
         return
     if args.command=='demo':
         run_demo(args.scenario,args.live_jev)

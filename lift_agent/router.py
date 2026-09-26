@@ -48,7 +48,7 @@ class Router:
     def plan(self):
         # Only the schema catalog and workflow are sent. No PINs, phone numbers or caller PII.
         if not self.live:
-            return {k:{'source':v[1], 'decision':'demo policy; Jev not called'} for k,v in QUESTIONS.items()}
+            return {k:{'source':v[1], 'decision':'demo policy; Jev not called', 'live':False} for k,v in QUESTIONS.items()}
         payload = {'model':os.getenv('JEV_MODEL','jev-latest'),
                    'state':{'workflow':'Elevator fault intake after safety triage', 'catalog':SOURCES},
                    'questions':{k:{'type':'choice','instructions':v[0],'criteria':SOURCES} for k,v in QUESTIONS.items()}}
@@ -67,7 +67,8 @@ class Router:
                     or abs(sum(probabilities.values())-1) > .01
                     or probabilities[expected] < max(probabilities.values())):
                     raise RoutingUnavailable('Jev decision needs human review')
-                plan[key] = {'source':answer['choice'], 'decision':f"Jev {response.get('model','unknown')}; confidence {confidence:.3f}"}
+                plan[key] = {'source':answer['choice'], 'decision':f"Jev {response.get('model','unknown')}; confidence {confidence:.3f}",
+                             'live':True, 'model':response.get('model','unknown'), 'confidence':confidence, 'probabilities':probabilities}
             return plan
         except RoutingUnavailable:
             raise
@@ -79,5 +80,7 @@ class Router:
         item = plan[operation]
         if item['source'] != QUESTIONS[operation][1]:
             raise RoutingUnavailable('Source does not own the required data')
-        db.execute('INSERT INTO audit(call_id,system,operation,reason,created_at) VALUES (?,?,?,?,?)',
-                   (call_id,item['source'],operation,item['decision'],timestamp))
+        detail = {k:item[k] for k in ('live','model','confidence','probabilities') if k in item}
+        detail['question'] = QUESTIONS[operation][0]
+        db.execute('INSERT INTO audit(call_id,system,operation,reason,created_at,detail) VALUES (?,?,?,?,?,?)',
+                   (call_id,item['source'],operation,item['decision'],timestamp,json.dumps(detail)))

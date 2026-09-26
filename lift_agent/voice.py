@@ -15,11 +15,14 @@ PROMPTS = {
 }
 
 
-def xml_response(message, step=None, input_kind='dtmf', dial=None):
+def xml_response(message, step=None, input_kind='dtmf', dial=None, hints=None):
     root = Element('Response')
     if step is not None:
-        gather = SubElement(root,'Gather',input=input_kind,action=f'/voice?step={step}',method='POST',
-                            timeout='7',speechTimeout='auto',actionOnEmptyResult='true',finishOnKey='#')
+        attrs=dict(input=input_kind,action=f'/voice?step={step}',method='POST',
+                   timeout='7',speechTimeout='auto',actionOnEmptyResult='true',finishOnKey='#')
+        if hints:
+            attrs['hints']=hints
+        gather = SubElement(root,'Gather',**attrs)
         SubElement(gather,'Say').text = message
     else:
         SubElement(root,'Say').text = message
@@ -79,7 +82,8 @@ class VoiceAgent:
                 return handoff('I could not confirm the information. A dispatcher will help you.', 'uncertain')
             save(new_state,retries)
             kind='speech dtmf' if new_state in ('machine','confirm_machine','symptom') else 'dtmf'
-            return xml_response(message or PROMPTS[new_state],data['next_step'],kind)
+            hints='zero,one,two,three,four,five,six,seven,eight,nine,E,Q,dash' if new_state=='machine' else None
+            return xml_response(message or PROMPTS[new_state],data['next_step'],kind,hints=hints)
 
         def handoff(message, flag=None):
             existing=db.execute('SELECT id FROM crm.service_cases WHERE call_id=?',(call_id,)).fetchone()

@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LiftLine // Ops Terminal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* Blocky sandbox-game palette: stone/dirt GUI with inventory-slot bevels */
+    --bg:#3b3b3b; --bg2:#2b2b2b; --panel:#8b8b8b; --panel-2:#c6c6c6;
+    --slot:#8b8b8b; --border-lo:#373737; --border-hi:#ffffff;
+    --text:#3f3f3f; --text-inv:#fff; --muted:#5a5a5a; --dim:#7a7a7a;
+    --gold:#fbd15b; --green:#5cb85c; --red:#d9534f; --blue:#4aa3df; --wood:#7a5230; --wood-lo:#4e341f;
+    --pixel:'Press Start 2P',monospace; --term:'VT323',monospace;
+  }
+  *{box-sizing:border-box; image-rendering:pixelated}
+  html{scrollbar-color:var(--wood) var(--bg)}
+  body{
+    margin:0;background:var(--bg);color:var(--text-inv);font-family:var(--term);font-size:19px;line-height:1.35;
+    background-image:
+      linear-gradient(rgba(0,0,0,.18) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,0,0,.18) 1px, transparent 1px);
+    background-size:16px 16px;
+  }
+  /* Minecraft-style inventory-slot bevel: light top/left, dark bottom/right */
+  .slot-bevel{
+    border-top:3px solid var(--border-hi); border-left:3px solid var(--border-hi);
+    border-bottom:3px solid var(--border-lo); border-right:3px solid var(--border-lo);
+    background:var(--panel);
+  }
+  .panel-bevel{
+    border-top:4px solid #6b6b6b; border-left:4px solid #6b6b6b;
+    border-bottom:4px solid #232323; border-right:4px solid #232323;
+    background:#545454;
+  }
+  header{
+    display:flex;align-items:center;gap:16px;padding:14px 20px;flex-wrap:wrap;
+    background:var(--wood);border-bottom:4px solid var(--wood-lo);position:sticky;top:0;z-index:5;
+    box-shadow:0 4px 0 0 rgba(0,0,0,.25);
+  }
+  header h1{
+    font-family:var(--pixel);font-size:15px;margin:0;color:var(--gold);
+    text-shadow:2px 2px 0 #000;letter-spacing:1px;
+  }
+  header h1 .blip{display:inline-block;width:10px;height:10px;background:var(--green);margin-right:8px;
+    box-shadow:0 0 0 2px #000; animation:blink 1.2s steps(2) infinite; vertical-align:middle}
+  @keyframes blink{50%{opacity:.25}}
+  .badge{
+    font-family:var(--pixel);font-size:9px;padding:7px 10px;color:#fff;
+    background:#5a5a5a;text-shadow:1px 1px 0 #000;
+    border-top:2px solid #8a8a8a;border-left:2px solid #8a8a8a;
+    border-bottom:2px solid #232323;border-right:2px solid #232323;
+    text-transform:uppercase;
+  }
+  .badge.mode-live{background:var(--red)}
+  .badge.mode-demo{background:#a87f2e;color:#fff}
+  .badge.on{background:var(--green)}
+  .spacer{flex:1}
+  header input[type=password]{
+    background:#2b2b2b;border-top:3px solid #1a1a1a;border-left:3px solid #1a1a1a;
+    border-bottom:3px solid #6b6b6b;border-right:3px solid #6b6b6b;
+    color:var(--gold);padding:8px 10px;width:220px;font-family:var(--term);font-size:17px;
+  }
+  header input[type=password]:focus{outline:none}
+  button{
+    font-family:var(--pixel);font-size:10px;background:#7a7a7a;color:#fff;text-shadow:1px 1px 0 #000;
+    padding:10px 14px;cursor:pointer;text-transform:uppercase;
+    border-top:3px solid #b0b0b0;border-left:3px solid #b0b0b0;
+    border-bottom:3px solid #2c2c2c;border-right:3px solid #2c2c2c;
+  }
+  button:active{
+    border-top:3px solid #2c2c2c;border-left:3px solid #2c2c2c;
+    border-bottom:3px solid #b0b0b0;border-right:3px solid #b0b0b0;
+    transform:translate(1px,1px);
+  }
+  button.ghost{background:#4a4a4a;color:var(--dim)}
+  #status-line{font-family:var(--term);font-size:16px;color:#f0e0c0}
+  nav{display:flex;gap:6px;padding:10px 20px;background:var(--bg2);flex-wrap:wrap;border-bottom:4px solid #111}
+  nav button{
+    background:#5a5a5a;color:#bbb;text-shadow:1px 1px 0 #000;
+    padding:10px 16px;
+  }
+  nav button.active{background:var(--gold);color:#3f2f00;text-shadow:none}
+  main{padding:24px;max-width:1400px;margin:0 auto}
+  .view{display:none}
+  .view.active{display:block}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:24px}
+  .card{padding:14px;position:relative;text-align:center}
+  .card .n{font-family:var(--pixel);font-size:22px;color:var(--gold);text-shadow:2px 2px 0 #000}
+  .card .l{color:#e6e6e6;font-size:13px;margin-top:8px;text-transform:uppercase;letter-spacing:.05em;text-shadow:1px 1px 0 #000}
+  .panel{padding:18px;margin-bottom:18px;color:#eee}
+  .panel h2{
+    font-family:var(--pixel);font-size:12px;color:var(--gold);margin:0 0 14px;text-transform:uppercase;
+    text-shadow:2px 2px 0 #000;
+  }
+  .panel > p{color:#cfcfcf;margin-top:-8px;font-size:16px}
+  table{width:100%;border-collapse:separate;border-spacing:0;font-size:15px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:2px solid #3a3a3a}
+  th{color:var(--gold);font-family:var(--pixel);font-size:9px;text-transform:uppercase;letter-spacing:.03em}
+  tr:hover td{background:rgba(255,255,255,.06)}
+  td{color:#e6e6e6}
+  code,.mono{font-family:var(--term);font-size:15px;color:#8fd7ff}
+  .pill{display:inline-block;padding:3px 9px;font-family:var(--pixel);font-size:8px;color:#fff;
+    text-shadow:1px 1px 0 #000;text-transform:uppercase}
+  .pill.status-dispatched,.pill.status-completed,.pill.status-sent,.pill.status-accepted{background:var(--green)}
+  .pill.status-pending,.pill.status-needs_dispatch,.pill.status-awaiting_approval,.pill.status-dispatch_requested{background:#c98a2b}
+  .pill.status-failed,.pill.status-approval_declined,.pill.status-needs_review{background:var(--red)}
+  .grid2{display:grid;grid-template-columns:2fr 1fr;gap:18px}
+  @media(max-width:900px){.grid2{grid-template-columns:1fr}}
+  .subtabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+  .subtabs button{background:#4a4a4a;color:#bbb;padding:6px 12px;font-size:9px}
+  .subtabs button.active{background:var(--gold);color:#3f2f00;text-shadow:none}
+  details{margin-bottom:6px}
+  details summary{cursor:pointer;color:#8fd7ff;font-family:var(--pixel);font-size:9px}
+  pre{white-space:pre-wrap;word-break:break-word;background:#1e1e1e;padding:10px;
+    border-top:2px solid #111;border-left:2px solid #111;border-bottom:2px solid #444;border-right:2px solid #444;
+    margin:8px 0 0;font-family:var(--term);color:#bbb}
+  .empty{color:#999;font-style:italic;padding:14px 0}
+  .log-line{display:grid;grid-template-columns:170px 90px 1fr;gap:10px;padding:7px 0;border-bottom:2px solid #3a3a3a}
+  .log-time{color:#999;font-size:14px}
+  .log-kind{font-family:var(--pixel);font-size:8px;text-transform:uppercase;padding-top:3px}
+  .log-kind.decision{color:var(--blue)}
+  .log-kind.notify{color:var(--green)}
+  .log-kind.call{color:var(--gold)}
+  .lift-shaft{
+    display:flex;gap:6px;align-items:flex-end;height:70px;margin:4px 0 20px;padding:10px;
+    background:#232323;border-top:3px solid #111;border-left:3px solid #111;
+    border-bottom:3px solid #555;border-right:3px solid #555;
+  }
+  .lift-car{width:24px;height:28px;background:var(--gold);position:relative;flex:none;
+    border-top:3px solid #fff3c4;border-left:3px solid #fff3c4;
+    border-bottom:3px solid #a87f2e;border-right:3px solid #a87f2e;
+    animation:hover 2.2s ease-in-out infinite}
+  @keyframes hover{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+  .prob-row{display:grid;grid-template-columns:82px 1fr 52px;gap:8px;align-items:center;margin:4px 0;font-size:15px}
+  .prob-bar{height:12px;background:#1e1e1e;border:2px solid #111}
+  .prob-fill{height:100%;background:#5a5a5a}
+  .prob-row.win .prob-fill{background:var(--green)}
+  .prob-row.win{color:#fff}
+  .big-pct{font-family:var(--pixel);font-size:22px;color:var(--green);margin:6px 0}
+  .steps{margin:0 0 14px;padding-left:20px;color:#ddd}
+  .steps li{margin:5px 0}
+  tr.pick{cursor:pointer}
+  tr.sel td{background:rgba(255,215,0,.14)}
+  .src-tables{color:#999;font-size:14px;margin-top:6px}
+  ::-webkit-scrollbar{width:14px;height:14px}
+  ::-webkit-scrollbar-track{background:var(--bg2)}
+  ::-webkit-scrollbar-thumb{background:var(--wood);border:2px solid var(--bg2)}
+  a{color:#8fd7ff}
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="blip"></span>LIFTLINE // OPS TERMINAL</h1>
+  <span id="mode-badge" class="badge">MODE: -</span>
+  <span id="jev-badge" class="badge">JEV: -</span>
+  <span id="notify-badge" class="badge">NOTIFY: -</span>
+  <div class="spacer"></div>
+  <span id="status-line">not connected</span>
+  <input id="admin-key" type="password" placeholder="ADMIN KEY">
+  <button id="save-key">Connect</button>
+  <button id="refresh-now" class="ghost">Refresh</button>
+</header>
+<nav>
+  <button data-view="overview" class="active">▣ Dashboard</button>
+  <button data-view="decisions">◈ How It Decides</button>
+  <button data-view="calls">☎ Live Calls</button>
+  <button data-view="database">▤ Our Database</button>
+  <button data-view="logs">▥ Logs</button>
+</nav>
+<main>
+
+  <section id="view-overview" class="view active">
+    <div class="lift-shaft" id="lift-shaft"></div>
+    <div class="cards" id="cards"></div>
+    <div class="grid2">
+      <div class="panel panel-bevel">
+        <h2>Cases</h2>
+        <div id="cases-table"></div>
+      </div>
+      <div class="panel panel-bevel">
+        <h2>Notification Outbox</h2>
+        <div id="notify-table"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="view-decisions" class="view">
+    <div class="grid2">
+      <div class="panel panel-bevel">
+        <h2>Routing Trace (Audit Log)</h2>
+        <p>Every automated lookup passes through Jev first. Jev returns a typed <code>Choice</code> naming the one
+          data source allowed to answer that question, with a calibrated confidence. Below is the actual decision
+          recorded for each call, in order.</p>
+        <div id="decisions-table"></div>
+      </div>
+      <div>
+        <div class="panel panel-bevel" style="margin-bottom:18px">
+          <h2>How Jev Decides</h2>
+          <ol class="steps">
+            <li>Agent needs a fact (e.g. "which car is machine 1002?").</li>
+            <li>Only the question and the source catalog go to Jev. No PINs, phone numbers or names are sent.</li>
+            <li>Jev returns a typed choice plus a probability for every source.</li>
+            <li>Policy accepts it only if confidence is 80%+, it is the top pick, and it matches the source that owns that data. Otherwise a human dispatcher takes over.</li>
+            <li>Only then is that one database queried, and the decision is logged.</li>
+          </ol>
+          <h2>Selected Decision</h2>
+          <div id="decision-detail"><div class="empty">Click a row in the routing trace.</div></div>
+        </div>
+        <div class="panel panel-bevel">
+          <h2>Decision Policy</h2>
+          <div id="legend"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="view-calls" class="view">
+    <div class="panel panel-bevel">
+      <h2>Calls (State Machine)</h2>
+      <p>One row per call in progress or completed. "State" is the current step in the phone workflow;
+        "Collected data" is what the agent has gathered/verified so far.</p>
+      <div id="calls-table"></div>
+    </div>
+  </section>
+
+  <section id="view-database" class="view">
+    <div class="panel panel-bevel">
+      <h2>Attached Data Sources</h2>
+      <p>Local stand-ins for SAP, CRM, IoT/telemetry and field-service systems — the same tables Jev's routing
+        decisions point into.</p>
+      <div class="subtabs" id="source-tabs"></div>
+      <div id="source-tables"></div>
+    </div>
+  </section>
+
+  <section id="view-logs" class="view">
+    <div class="panel panel-bevel">
+      <h2>Live Log (Merged)</h2>
+      <p>Routing decisions, notification outbox activity, and call events, newest first.</p>
+      <div id="log-feed"></div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+const API='/api/report';
+let lastReport=null;
+
+function esc(s){return String(s===undefined||s===null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function fmtTime(iso){ if(!iso) return ''; try{ const d=new Date(iso); return d.toLocaleString(); }catch(e){ return iso; } }
+
+function getKey(){ return localStorage.getItem('liftline_admin_key')||''; }
+function setKey(k){ localStorage.setItem('liftline_admin_key',k); }
+
+function table(rows,columns,opts){
+  opts=opts||{};
+  if(!rows||!rows.length) return '<div class="empty">— no rows yet —</div>';
+  const cols=columns||Object.keys(rows[0]);
+  let html='<table><thead><tr>'+cols.map(c=>`<th>${esc(c.label||c.key)}</th>`).join('')+'</tr></thead><tbody>';
+  for(const row of rows){
+    html+='<tr>'+cols.map(c=>{
+      const raw=row[c.key];
+      if(c.render) return `<td>${c.render(raw,row)}</td>`;
+      return `<td class="${c.mono?'mono':''}">${esc(raw)}</td>`;
+    }).join('')+'</tr>';
+  }
+  return html+'</tbody></table>';
+}
+
+function pill(status){ return `<span class="pill status-${esc(status)}">${esc(status)}</span>`; }
+
+function renderCards(r){
+  const cases=r.cases||[], notes=r.notifications||[], calls=r.calls||[], wo=r.work_orders||[];
+  const active=cases.filter(c=>!['completed','approval_declined','cancelled'].includes(c.status)).length;
+  const pending=notes.filter(n=>n.status==='pending').length;
+  const sent=notes.filter(n=>n.status==='sent'||n.status==='accepted').length;
+  const failed=notes.filter(n=>n.status==='failed'||n.status==='needs_review').length;
+  const items=[
+    ['Total Cases',cases.length],
+    ['Active Cases',active],
+    ['Work Orders',wo.length],
+    ['Calls Seen',calls.length],
+    ['Notify Pending',pending],
+    ['Notify Sent',sent],
+    ['Notify Failed',failed],
+    ['Decisions Logged',(r.routing_trace||[]).length],
+  ];
+  document.getElementById('cards').innerHTML=items.map(([l,n])=>
+    `<div class="card slot-bevel"><div class="n">${n}</div><div class="l">${esc(l)}</div></div>`).join('');
+}
+
+function renderLiftShaft(r){
+  const calls=(r.calls||[]).filter(c=>!['done','failed'].includes(c.state));
+  const shaft=document.getElementById('lift-shaft');
+  if(!calls.length){ shaft.innerHTML='<span style="color:var(--dim);font-size:14px;padding:6px">no lifts in motion</span>'; return; }
+  shaft.innerHTML=calls.map((c,i)=>
+    `<div class="lift-car" title="${esc(c.id)} — ${esc(c.state)}" style="animation-delay:${(i%4)*.3}s"></div>`).join('');
+}
+
+function renderOverview(r){
+  renderCards(r);
+  renderLiftShaft(r);
+  document.getElementById('cases-table').innerHTML=table(r.cases,[
+    {key:'id',label:'Case',mono:true},{key:'machine',label:'Machine'},
+    {key:'status',label:'Status',render:pill},
+    {key:'safety_flag',label:'Safety'},{key:'is_repeat_fault',label:'Repeat?',render:v=>v?'yes':'no'},
+    {key:'created_at',label:'Created',render:fmtTime}
+  ]);
+  document.getElementById('notify-table').innerHTML=table(r.notifications,[
+    {key:'recipient',label:'Recipient',mono:true},{key:'status',label:'Status',render:pill},
+    {key:'body',label:'Message'},{key:'error',label:'Error'},{key:'created_at',label:'Created',render:fmtTime}
+  ]);
+}
+
+let selectedDecision=null;
+function parseDetail(d){ try{return JSON.parse(d.detail||'{}');}catch(e){return {};} }
+function pct(x){ return (x*100).toFixed(1).replace(/\.0$/,'')+'%'; }
+function renderDecisionDetail(r){
+  const trace=r.routing_trace||[];
+  const box=document.getElementById('decision-detail');
+  const d=trace.find(x=>x.id===selectedDecision)||trace[trace.length-1];
+  if(!d){ box.innerHTML='<div class="empty">No decisions yet. Place a call.</div>'; return; }
+  const det=parseDetail(d), src=r.sources||{};
+  const tables=(src[d.system]?Object.keys(src[d.system]):[]).join(', ');
+  let html=`<p><b>Question:</b> ${esc(det.question||d.operation)}</p><p><b>Database used:</b> <span class="pill status-dispatched">${esc(d.system)}</span></p>`;
+  if(det.probabilities){
+    html+=`<div class="big-pct">${pct(det.confidence)}</div><div style="color:#999">confidence · model ${esc(det.model)}</div><div style="margin-top:8px">`;
+    const rows=Object.entries(det.probabilities).sort((a,b)=>b[1]-a[1]);
+    for(const [k,v] of rows) html+=`<div class="prob-row ${k===d.system?'win':''}"><span>${esc(k)}</span><div class="prob-bar"><div class="prob-fill" style="width:${(v*100).toFixed(1)}%"></div></div><span>${pct(v)}</span></div>`;
+    html+='</div>';
+  } else {
+    html+='<div class="empty">Older or demo-mode decision: Jev probabilities were not recorded. New live calls show them.</div>';
+  }
+  if(tables) html+=`<div class="src-tables">${esc(d.system)} tables: ${esc(tables)}</div>`;
+  box.innerHTML=html;
+}
+
+function renderDecisions(r){
+  const trace=r.routing_trace||[];
+  const rows=trace.slice().reverse().map(d=>{const det=parseDetail(d); return Object.assign({},d,{_pct:det.confidence!==undefined?pct(det.confidence):'n/a'});});
+  document.getElementById('decisions-table').innerHTML=table(rows,[
+    {key:'created_at',label:'Time',render:fmtTime},
+    {key:'call_id',label:'Call',mono:true},
+    {key:'operation',label:'Question'},
+    {key:'system',label:'Routed To',render:s=>`<span class="pill status-dispatched">${esc(s)}</span>`},
+    {key:'_pct',label:'Confidence'},
+    {key:'reason',label:'Jev Decision'},
+  ]);
+  const current=selectedDecision||(trace[trace.length-1]||{}).id;
+  document.querySelectorAll('#decisions-table tbody tr').forEach((tr,i)=>{
+    tr.classList.add('pick');
+    if(rows[i].id===current) tr.classList.add('sel');
+    tr.onclick=()=>{ selectedDecision=rows[i].id; renderDecisions(lastReport); };
+  });
+  renderDecisionDetail(r);
+  const legend=r.legend||{questions:{},sources:{}};
+  let html='<table><thead><tr><th>Question</th><th>Allowed Source</th><th>What Jev Is Asked</th></tr></thead><tbody>';
+  for(const [key,q] of Object.entries(legend.questions)){
+    html+=`<tr><td class="mono">${esc(key)}</td><td>${esc(q.source)}</td><td>${esc(q.prompt)}</td></tr>`;
+  }
+  html+='</tbody></table><h2 style="margin-top:20px">Source Catalog</h2><table><tbody>';
+  for(const [key,desc] of Object.entries(legend.sources)){
+    html+=`<tr><td class="mono">${esc(key)}</td><td>${esc(desc)}</td></tr>`;
+  }
+  document.getElementById('legend').innerHTML=html+'</tbody></table>';
+}
+
+function renderCalls(r){
+  document.getElementById('calls-table').innerHTML=table(r.calls,[
+    {key:'id',label:'Call ID',mono:true},
+    {key:'caller',label:'Caller',mono:true},
+    {key:'state',label:'Step',render:s=>`<span class="pill status-dispatch_requested">${esc(s)}</span>`},
+    {key:'retries',label:'Retries'},
+    {key:'created_at',label:'Started',render:fmtTime},
+    {key:'data',label:'Collected Data',render:d=>{
+      let parsed; try{parsed=JSON.parse(d);}catch(e){parsed=d;}
+      return `<details><summary>▶ view</summary><pre>${esc(JSON.stringify(parsed,null,2))}</pre></details>`;
+    }},
+  ]);
+}
+
+let activeSourceSchema=null, activeSourceTable=null;
+function renderDatabase(r){
+  const sources=r.sources||{};
+  const schemas=Object.keys(sources);
+  if(!activeSourceSchema||!schemas.includes(activeSourceSchema)) activeSourceSchema=schemas[0];
+  document.getElementById('source-tabs').innerHTML=schemas.map(s=>
+    `<button data-schema="${esc(s)}" class="${s===activeSourceSchema?'active':''}">${esc(s.toUpperCase())}</button>`).join('');
+  for(const btn of document.querySelectorAll('#source-tabs button')){
+    btn.onclick=()=>{ activeSourceSchema=btn.dataset.schema; activeSourceTable=null; renderDatabase(lastReport); };
+  }
+  const tables=sources[activeSourceSchema]||{};
+  const names=Object.keys(tables);
+  if(!activeSourceTable||!names.includes(activeSourceTable)) activeSourceTable=names[0];
+  let html='<div class="subtabs">'+names.map(n=>
+    `<button data-table="${esc(n)}" class="${n===activeSourceTable?'active':''}">${esc(n)} (${tables[n].length})</button>`).join('')+'</div>';
+  html+='<div id="source-table-body">'+table(tables[activeSourceTable])+'</div>';
+  document.getElementById('source-tables').innerHTML=html;
+  for(const btn of document.querySelectorAll('#source-tables .subtabs button')){
+    btn.onclick=()=>{ activeSourceTable=btn.dataset.table; renderDatabase(lastReport); };
+  }
+}
+
+function renderLogs(r){
+  const entries=[];
+  for(const d of r.routing_trace||[]) entries.push({t:d.created_at,kind:'decision',
+    text:`Call ${d.call_id}: "${d.operation}" routed to ${d.system} — ${d.reason}${parseDetail(d).confidence!==undefined?' ('+pct(parseDetail(d).confidence)+')':''}`});
+  for(const n of r.notifications||[]) entries.push({t:n.created_at,kind:'notify',
+    text:`Notify ${n.recipient}: ${n.status}${n.error?' ('+n.error+')':''} — ${n.body}`});
+  for(const c of r.calls||[]) entries.push({t:c.created_at,kind:'call',
+    text:`Call ${c.id} from ${c.caller}: currently "${c.state}" (${c.retries} retries)`});
+  entries.sort((a,b)=>(b.t||'').localeCompare(a.t||''));
+  if(!entries.length){ document.getElementById('log-feed').innerHTML='<div class="empty">— no activity yet —</div>'; return; }
+  document.getElementById('log-feed').innerHTML=entries.map(e=>
+    `<div class="log-line"><span class="log-time">${esc(fmtTime(e.t))}</span><span class="log-kind ${e.kind}">${esc(e.kind)}</span><span>${esc(e.text)}</span></div>`).join('');
+}
+
+function renderAll(r){
+  lastReport=r;
+  document.getElementById('mode-badge').textContent='MODE: '+r.mode;
+  document.getElementById('mode-badge').className='badge mode-'+r.mode;
+  document.getElementById('jev-badge').textContent='JEV: '+(r.jev_enabled?'LIVE':'DEMO');
+  document.getElementById('notify-badge').textContent='NOTIFY: '+(r.notifications_enabled?'ON':'OFF');
+  document.getElementById('notify-badge').className='badge '+(r.notifications_enabled?'on':'');
+  renderOverview(r);
+  renderDecisions(r);
+  renderCalls(r);
+  renderDatabase(r);
+  renderLogs(r);
+}
+
+async function poll(){
+  const key=getKey();
+  const status=document.getElementById('status-line');
+  if(!key){ status.textContent='enter admin key to connect'; return; }
+  try{
+    const res=await fetch(API,{headers:{'Authorization':'Bearer '+key}});
+    if(res.status===401){ status.textContent='⛔ unauthorized — check ADMIN_API_KEY'; return; }
+    if(!res.ok){ status.textContent='server error '+res.status; return; }
+    const data=await res.json();
+    renderAll(data);
+    status.textContent='● connected — updated '+new Date().toLocaleTimeString();
+  }catch(e){
+    status.textContent='⛔ cannot reach service';
+  }
+}
+
+document.getElementById('save-key').onclick=()=>{
+  setKey(document.getElementById('admin-key').value.trim());
+  poll();
+};
+document.getElementById('refresh-now').onclick=poll;
+document.getElementById('admin-key').value=getKey();
+
+for(const btn of document.querySelectorAll('nav button')){
+  btn.onclick=()=>{
+    for(const b of document.querySelectorAll('nav button')) b.classList.remove('active');
+    for(const v of document.querySelectorAll('.view')) v.classList.remove('active');
+    btn.classList.add('active');
+    document.getElementById('view-'+btn.dataset.view).classList.add('active');
+  };
+}
+
+poll();
+setInterval(poll,2000);
+</script>
+</body>
+</html>

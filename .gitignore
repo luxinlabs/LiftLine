@@ -6,6 +6,7 @@ data-*/
 seed/otis/*.db
 seed/otis/*.xlsx
 seed/otis/csv/
+docs/demo-data-report.md
 __pycache__/
 *.pyc
 node_modules/

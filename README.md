@@ -73,6 +73,88 @@ Each demo run creates isolated SQLite databases, simulates the complete conversa
 
 ## 📋 How It Works
 
+```mermaid
+flowchart TD
+    Start([📞 Incoming Call]) --> Safety{Safety Triage<br/>Danger/Entrapment?}
+
+    Safety -->|Yes| Human[🚨 Route to Dispatcher<br/>Immediate Human Response]
+    Safety -->|No| Machine[🔢 Collect Machine Number<br/>Speech + DTMF]
+
+    Machine --> Confirm{Confirm<br/>Machine ID?}
+    Confirm -->|Retry| Machine
+    Confirm -->|Yes| PIN[🔐 Enter 6-Digit PIN<br/>Contact Verification]
+
+    PIN --> Verify{Verify Identity<br/>Phone + PIN Hash}
+    Verify -->|Failed| Human
+    Verify -->|Success| Jev[🤖 TypeSafe Jev Routing<br/>7 Questions → 7 Sources]
+
+    Jev --> JevCheck{Confidence<br/>≥80%?}
+    JevCheck -->|No| Human
+    JevCheck -->|Yes| Equipment[⚙️ Equipment Lookup<br/>SAP: Machine → Car + Controller]
+
+    Equipment --> EquipCheck{Machine<br/>Valid?}
+    EquipCheck -->|No| Human
+    EquipCheck -->|Yes| Telemetry[📡 Telemetry Check<br/>IoT: Health + Freshness]
+
+    Telemetry --> TelCheck{Telemetry<br/>Fresh?}
+    TelCheck -->|Stale/Missing| Human
+    TelCheck -->|Valid| Critical{Critical<br/>Events?}
+
+    Critical -->|Entrapment/Safety| Human
+    Critical -->|None| Describe[🎤 Describe Issue<br/>Speech Recognition]
+
+    Describe --> Fault[🔍 Fault Analysis<br/>Field: Component Correlation<br/>Prior Repair Matching]
+
+    Fault --> Coverage[📋 Coverage Check<br/>SAP: Warranty + Contract]
+
+    Coverage --> Billable{Billable<br/>Callout?}
+    Billable -->|Yes| Approve{Caller<br/>Approves Cost?}
+    Approve -->|No| Decline[❌ Case Logged<br/>No Dispatch]
+    Approve -->|Yes| Duplicate
+    Billable -->|No - Covered| Duplicate
+
+    Duplicate[🔎 Duplicate Check<br/>CRM: Active Cases]
+
+    Duplicate --> DupCheck{Existing<br/>Case?}
+    DupCheck -->|Yes| Human
+    DupCheck -->|No| Dispatch[👷 Technician Match<br/>Field: Cert + Availability]
+
+    Dispatch --> DispCheck{Technician<br/>Available?}
+    DispCheck -->|No| Human
+    DispCheck -->|Yes| Create[💾 Create Case<br/>Atomic: Case + Work Order + Outbox]
+
+    Create --> Consent{Notification<br/>Consent?}
+    Consent -->|No| Report1[📢 Voice Report Only<br/>Case Number + ETA]
+    Consent -->|Yes| Queue[📬 Queue Notifications<br/>Photon: Caller + Tech + Dispatcher]
+
+    Queue --> Report2[📢 Voice Report<br/>Case Number + Provisional ETA]
+
+    Report1 --> End1([✅ Call Complete])
+    Report2 --> Notify[📲 Send iMessages<br/>Durable Outbox + Retry]
+
+    Notify --> DispAccept{Dispatcher<br/>Accepts?}
+    DispAccept -->|Yes| FinalETA[⏱️ Update ETA<br/>Final Arrival Time]
+    DispAccept -->|Pending| Wait[⏳ Awaiting Confirmation]
+
+    FinalETA --> End2([✅ Workflow Complete])
+    Wait --> End3([⏸️ Pending Acceptance])
+    Decline --> End4([📝 Logged - No Action])
+    Human --> End5([👤 Human Takeover])
+
+    style Start fill:#4CAF50,stroke:#2E7D32,color:#fff
+    style Human fill:#FF5722,stroke:#D84315,color:#fff
+    style Jev fill:#2196F3,stroke:#1565C0,color:#fff
+    style Create fill:#9C27B0,stroke:#6A1B9A,color:#fff
+    style End2 fill:#4CAF50,stroke:#2E7D32,color:#fff
+    style End5 fill:#FF9800,stroke:#E65100,color:#fff
+```
+
+### Workflow Summary
+
+The voice experience is a **structured workflow**, not an open-ended chatbot. Jev makes typed routing decisions; all business logic remains deterministic and auditable.
+
+**Key Decision Points:**
+
 1. **Safety Triage** — Immediate dispatcher routing for entrapment, injury, or danger keywords
 2. **Identity Verification** — Phone number matching + 6-digit PIN validation
 3. **AI Routing** — Jev selects optimal data sources for 7 workflow questions across 4 systems
@@ -82,8 +164,6 @@ Each demo run creates isolated SQLite databases, simulates the complete conversa
 7. **Technician Dispatch** — Certification matching, availability checks, travel time estimation
 8. **Notification Delivery** — Consent-based case reports and ETA updates via iMessage
 9. **Dispatcher Confirmation** — Acceptance endpoint with final ETA and assignment lock-in
-
-The voice experience is a **structured workflow**, not an open-ended chatbot. Jev makes typed routing decisions; all business logic remains deterministic and auditable.
 
 ## 📁 Project Structure
 
@@ -105,6 +185,24 @@ docs/
 seed/                  # Synthetic data fixtures
 tests/                 # Unit & integration tests
 ```
+
+## 📊 Operator Dashboard
+
+`python3 -m lift_agent serve` also serves a browser dashboard at the service root (e.g. `http://127.0.0.1:8080/`).
+Open that URL, paste your `ADMIN_API_KEY` (from `.env`) into the **Admin API key** field, and click **Connect**. It
+polls the same admin-protected `GET /api/report` endpoint the CLI's `report` command uses, every 2 seconds, across
+four tabs:
+
+- **Dashboard** — case/work-order/notification counters and tables at a glance.
+- **How it decides** — the routing trace of every Jev decision made so far (question → chosen source → confidence),
+  plus the fixed policy table showing which question is allowed to go to which source, and why.
+- **Live calls** — one row per phone call, its current step in the voice state machine, and the data collected/
+  verified so far — what's happening in the back end while a call is in progress.
+- **Our database** — a read-only browser over the four attached SQLite stand-ins (SAP/CRM/IoT/field), table by table.
+- **Logs** — routing decisions, notification outbox activity, and call events merged into one chronological feed.
+
+No admin key, no data: the dashboard shell loads without one, but every tab stays empty until a valid key is
+supplied — the same authorization `/api/report` already enforced.
 
 ### CLI Commands
 

@@ -66,6 +66,7 @@ def handler_for(store,config):
                 report['legend']={'questions':{k:{'prompt':v[0],'source':v[1]} for k,v in QUESTIONS.items()},'sources':SOURCES}
                 report['mode']=config.mode
                 report['jev_enabled']=config.jev_enabled
+                report['notifications_enabled']=config.send_notifications
                 return self.respond(200,report)
             static=self.static_file(route)
             if static is not None:

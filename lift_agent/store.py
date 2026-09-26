@@ -90,9 +90,11 @@ class Store:
 CREATE TABLE IF NOT EXISTS metadata(key TEXT PRIMARY KEY, value TEXT);
 CREATE TABLE IF NOT EXISTS calls(id TEXT PRIMARY KEY, caller TEXT NOT NULL, state TEXT NOT NULL, data TEXT NOT NULL, retries INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS webhook_replies(call_id TEXT NOT NULL, step TEXT NOT NULL, response TEXT NOT NULL, PRIMARY KEY(call_id, step));
-CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY, call_id TEXT, system TEXT NOT NULL, operation TEXT NOT NULL, reason TEXT NOT NULL, created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY, call_id TEXT, system TEXT NOT NULL, operation TEXT NOT NULL, reason TEXT NOT NULL, created_at TEXT NOT NULL, detail TEXT);
 CREATE TABLE IF NOT EXISTS outbox(id INTEGER PRIMARY KEY, dedupe_key TEXT UNIQUE NOT NULL, recipient TEXT NOT NULL, body TEXT NOT NULL, status TEXT NOT NULL, provider_id TEXT, error TEXT, created_at TEXT NOT NULL);
 ''')
+            if 'detail' not in [r[1] for r in db.execute('PRAGMA table_info(audit)')]:
+                db.execute('ALTER TABLE audit ADD COLUMN detail TEXT')
 
     def seed(self, now=None):
         now = now or now_utc()
